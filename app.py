@@ -4,7 +4,7 @@ CineplexxDB - Cinema Database Management System
 Render Deployment Version (PostgreSQL)
 """
 from flask import Flask, render_template_string, request, jsonify
-import psycopg2
+import psycopg 
 import os
 from datetime import date, time
 from decimal import Decimal
@@ -21,7 +21,7 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg.connect(DATABASE_URL)
 
 def serialize_row(row, columns):
     result = {}
