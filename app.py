@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 CineplexxDB - Cinema Database Management System
-Render Deployment Version (PostgreSQL)
+Render Deployment Version (PostgreSQL) - Auto-loads sample data
 """
 from flask import Flask, render_template_string, request, jsonify
-import psycopg 
+import psycopg
 import os
 from datetime import date, time
 from decimal import Decimal
@@ -16,7 +16,6 @@ app = Flask(__name__)
 # ============================================
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://localhost/cineplexxdb')
 
-# Fix for Render's postgres:// vs postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -865,7 +864,7 @@ def search_table(table):
         return jsonify({'error': str(e)}), 500
 
 # ============================================
-# INITIALIZE DATABASE
+# INITIALIZE DATABASE WITH SAMPLE DATA
 # ============================================
 def init_db():
     try:
@@ -882,6 +881,31 @@ def init_db():
         ''')
         
         cursor.execute('''
+            CREATE TABLE IF NOT EXISTS department (
+                department_id INT PRIMARY KEY,
+                department_name VARCHAR(50) NOT NULL
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS customer (
+                customer_id INT PRIMARY KEY,
+                full_name VARCHAR(100) NOT NULL,
+                phone_number VARCHAR(20) UNIQUE,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                date_of_birth DATE NOT NULL,
+                gender VARCHAR(10) NOT NULL
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS genre (
+                genre_id INT PRIMARY KEY,
+                genre_name VARCHAR(30) NOT NULL
+            )
+        ''')
+        
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS hall (
                 hall_id INT PRIMARY KEY,
                 hall_name VARCHAR(50) NOT NULL,
@@ -891,13 +915,10 @@ def init_db():
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS seat (
-                hall_id INT NOT NULL,
-                seat_number INT NOT NULL,
-                seat_row VARCHAR(5) NOT NULL,
-                seat_type VARCHAR(10) NOT NULL CHECK (seat_type IN ('Regular', 'VIP')),
-                PRIMARY KEY (hall_id, seat_number, seat_row),
-                FOREIGN KEY (hall_id) REFERENCES hall(hall_id)
+            CREATE TABLE IF NOT EXISTS food (
+                food_id INT PRIMARY KEY,
+                food_name VARCHAR(50) NOT NULL,
+                price DECIMAL(6,2) NOT NULL CHECK (price > 0)
             )
         ''')
         
@@ -915,9 +936,26 @@ def init_db():
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS genre (
-                genre_id INT PRIMARY KEY,
-                genre_name VARCHAR(30) NOT NULL
+            CREATE TABLE IF NOT EXISTS employee (
+                employee_id INT PRIMARY KEY,
+                full_name VARCHAR(100) NOT NULL,
+                role VARCHAR(30) NOT NULL,
+                phone_number VARCHAR(20) UNIQUE NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                date_of_birth DATE NOT NULL,
+                department_id INT NOT NULL REFERENCES department(department_id),
+                cinema_id INT NOT NULL REFERENCES cinema(cinema_id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS seat (
+                hall_id INT NOT NULL,
+                seat_number INT NOT NULL,
+                seat_row VARCHAR(5) NOT NULL,
+                seat_type VARCHAR(10) NOT NULL CHECK (seat_type IN ('Regular', 'VIP')),
+                PRIMARY KEY (hall_id, seat_number, seat_row),
+                FOREIGN KEY (hall_id) REFERENCES hall(hall_id)
             )
         ''')
         
@@ -944,17 +982,6 @@ def init_db():
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS customer (
-                customer_id INT PRIMARY KEY,
-                full_name VARCHAR(100) NOT NULL,
-                phone_number VARCHAR(20) UNIQUE,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                date_of_birth DATE NOT NULL,
-                gender VARCHAR(10) NOT NULL
-            )
-        ''')
-        
-        cursor.execute('''
             CREATE TABLE IF NOT EXISTS booking (
                 booking_id INT PRIMARY KEY,
                 customer_id INT NOT NULL REFERENCES customer(customer_id),
@@ -975,26 +1002,6 @@ def init_db():
                 seat_row VARCHAR(5) NOT NULL,
                 ticket_price DECIMAL(8,2) NOT NULL CHECK (ticket_price > 0),
                 FOREIGN KEY (hall_id, seat_number, seat_row) REFERENCES seat(hall_id, seat_number, seat_row)
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS department (
-                department_id INT PRIMARY KEY,
-                department_name VARCHAR(50) NOT NULL
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS employee (
-                employee_id INT PRIMARY KEY,
-                full_name VARCHAR(100) NOT NULL,
-                role VARCHAR(30) NOT NULL,
-                phone_number VARCHAR(20) UNIQUE NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                date_of_birth DATE NOT NULL,
-                department_id INT NOT NULL REFERENCES department(department_id),
-                cinema_id INT NOT NULL REFERENCES cinema(cinema_id)
             )
         ''')
         
@@ -1027,14 +1034,6 @@ def init_db():
             CREATE TABLE IF NOT EXISTS showtime_supervisor (
                 employee_id INT PRIMARY KEY REFERENCES employee(employee_id),
                 shift_type VARCHAR(20) NOT NULL
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS food (
-                food_id INT PRIMARY KEY,
-                food_name VARCHAR(50) NOT NULL,
-                price DECIMAL(6,2) NOT NULL CHECK (price > 0)
             )
         ''')
         
@@ -1088,6 +1087,133 @@ def init_db():
         ''')
         
         conn.commit()
+        
+        # Check if data exists
+        cursor.execute('SELECT COUNT(*) FROM cinema')
+        if cursor.fetchone()[0] == 0:
+            # Insert sample data
+            print("Loading sample data...")
+            
+            # Cinema
+            cursor.execute('''INSERT INTO cinema (cinema_id, location, name) VALUES 
+                (1, 'Tirana', 'Cineplexx TEG'),
+                (2, 'Tirana', 'Cineplexx City Park'),
+                (3, 'Durres', 'Cineplexx Durres')''')
+            
+            # Department
+            cursor.execute('''INSERT INTO department (department_id, department_name) VALUES 
+                (1, 'Management'), (2, 'Box Office'), (3, 'Concessions'),
+                (4, 'Projection'), (5, 'Maintenance'), (6, 'Security')''')
+            
+            # Customer
+            cursor.execute('''INSERT INTO customer (customer_id, full_name, phone_number, email, date_of_birth, gender) VALUES 
+                (1, 'Arben Hoxha', '+355691234567', 'arben.hoxha@email.com', '1990-05-15', 'Male'),
+                (2, 'Maria Koci', '+355692345678', 'maria.koci@email.com', '1985-08-22', 'Female'),
+                (3, 'Dritan Leka', '+355693456789', 'dritan.leka@email.com', '1992-03-10', 'Male'),
+                (4, 'Elena Brahimi', '+355694567890', 'elena.brahimi@email.com', '1988-12-01', 'Female'),
+                (5, 'Besnik Shehu', '+355695678901', 'besnik.shehu@email.com', '1995-07-25', 'Male')''')
+            
+            # Genre
+            cursor.execute('''INSERT INTO genre (genre_id, genre_name) VALUES 
+                (1, 'Action'), (2, 'Comedy'), (3, 'Drama'), (4, 'Horror'), (5, 'Science Fiction'),
+                (6, 'Romance'), (7, 'Thriller'), (8, 'Animation'), (9, 'Adventure'), (10, 'Fantasy')''')
+            
+            # Hall
+            cursor.execute('''INSERT INTO hall (hall_id, hall_name, capacity, cinema_id) VALUES 
+                (1, 'Hall A - IMAX', 200, 1),
+                (2, 'Hall B - Premium', 150, 1),
+                (3, 'Hall C - Standard', 120, 1),
+                (4, 'Hall D - Standard', 120, 2),
+                (5, 'Hall E - VIP', 50, 2)''')
+            
+            # Food
+            cursor.execute('''INSERT INTO food (food_id, food_name, price) VALUES 
+                (1, 'Small Popcorn', 350.00), (2, 'Medium Popcorn', 500.00), (3, 'Large Popcorn', 650.00),
+                (4, 'Small Soda', 200.00), (5, 'Medium Soda', 300.00), (6, 'Large Soda', 400.00),
+                (7, 'Hot Dog', 450.00), (8, 'Nachos', 550.00)''')
+            
+            # Movie
+            cursor.execute('''INSERT INTO movie (movie_id, title, duration, release_date, language, age_rating, adult_price, kids_price) VALUES 
+                (1, 'The Dark Knight Returns', 152, '2025-06-15', 'English', 13, 800.00, 500.00),
+                (2, 'Love in Paris', 118, '2025-07-20', 'English', 12, 700.00, 450.00),
+                (3, 'Alien Invasion 3', 135, '2025-08-10', 'English', 16, 850.00, 550.00),
+                (4, 'Comedy Night', 95, '2025-09-01', 'English', 7, 600.00, 400.00),
+                (5, 'Frozen Dreams', 105, '2025-10-01', 'English', 0, 650.00, 450.00)''')
+            
+            # Employee
+            cursor.execute('''INSERT INTO employee (employee_id, full_name, role, phone_number, email, date_of_birth, department_id, cinema_id) VALUES 
+                (1, 'Robert Pasha', 'General Manager', '+355681111111', 'robert.p@cineplexx.al', '1975-03-15', 1, 1),
+                (2, 'Sara Kelmendi', 'Operations Manager', '+355682222222', 'sara.k@cineplexx.al', '1980-07-22', 1, 1),
+                (3, 'Tom Berisha', 'Floor Manager', '+355683333333', 'tom.b@cineplexx.al', '1985-11-10', 1, 2),
+                (4, 'Alba Hoti', 'Senior Cashier', '+355684444444', 'alba.h@cineplexx.al', '1992-05-18', 2, 1),
+                (5, 'Bujar Duka', 'Cashier', '+355685555555', 'bujar.d@cineplexx.al', '1995-08-25', 2, 1)''')
+            
+            # Seat
+            cursor.execute('''INSERT INTO seat (hall_id, seat_number, seat_row, seat_type) VALUES 
+                (1, 1, 'A', 'Regular'), (1, 2, 'A', 'Regular'), (1, 3, 'A', 'Regular'), (1, 4, 'A', 'Regular'), (1, 5, 'A', 'Regular'),
+                (1, 1, 'B', 'Regular'), (1, 2, 'B', 'Regular'), (1, 3, 'B', 'Regular'), (1, 4, 'B', 'Regular'), (1, 5, 'B', 'Regular'),
+                (1, 1, 'C', 'VIP'), (1, 2, 'C', 'VIP'), (1, 3, 'C', 'VIP'), (1, 4, 'C', 'VIP'), (1, 5, 'C', 'VIP'),
+                (2, 1, 'A', 'VIP'), (2, 2, 'A', 'VIP'), (2, 3, 'A', 'VIP'), (2, 4, 'A', 'VIP'), (2, 5, 'A', 'VIP')''')
+            
+            # Movie Genre
+            cursor.execute('''INSERT INTO movie_genre (movie_id, genre_id) VALUES 
+                (1, 1), (1, 7), (2, 6), (2, 2), (3, 5), (3, 1), (4, 2), (5, 8), (5, 10)''')
+            
+            # Showtime
+            cursor.execute('''INSERT INTO showtime (showtime_id, movie_id, hall_id, show_date, start_time, end_time) VALUES 
+                (1, 1, 1, '2026-03-01', '10:00:00', '12:32:00'),
+                (2, 1, 1, '2026-03-01', '14:00:00', '16:32:00'),
+                (3, 2, 2, '2026-03-01', '11:00:00', '12:58:00'),
+                (4, 3, 1, '2026-03-02', '18:00:00', '20:15:00')''')
+            
+            # Manager
+            cursor.execute('''INSERT INTO manager (employee_id, management_level, contract_type, hire_date) VALUES 
+                (1, 1, 'Full-time', '2015-01-10'),
+                (2, 2, 'Full-time', '2017-03-15'),
+                (3, 3, 'Full-time', '2019-06-20')''')
+            
+            # Cashier
+            cursor.execute('''INSERT INTO cashier (employee_id, shift_type, hire_date, employment_status) VALUES 
+                (4, 'Morning', '2020-02-01', 'Active'),
+                (5, 'Afternoon', '2021-05-15', 'Active')''')
+            
+            # Booking
+            cursor.execute('''INSERT INTO booking (booking_id, customer_id, showtime_id, booking_date, adult_seat, child_seat) VALUES 
+                (1, 1, 1, '2026-02-28', 2, 0),
+                (2, 2, 3, '2026-02-28', 2, 1)''')
+            
+            # Ticket
+            cursor.execute('''INSERT INTO ticket (ticket_id, booking_id, showtime_id, hall_id, seat_number, seat_row, ticket_price) VALUES 
+                (1, 1, 1, 1, 1, 'A', 800.00),
+                (2, 1, 1, 1, 2, 'A', 800.00),
+                (3, 2, 3, 2, 1, 'A', 700.00),
+                (4, 2, 3, 2, 2, 'A', 700.00),
+                (5, 2, 3, 2, 3, 'A', 450.00)''')
+            
+            # Food Order
+            cursor.execute('''INSERT INTO food_order (order_id, customer_id, order_date, order_time, order_amount) VALUES 
+                (1, 1, '2026-03-01', '09:45:00', 1200.00),
+                (2, 2, '2026-03-01', '10:30:00', 950.00)''')
+            
+            # Order Food
+            cursor.execute('''INSERT INTO order_food (order_id, food_id, quantity) VALUES 
+                (1, 3, 1), (1, 6, 2), (2, 2, 1), (2, 5, 1)''')
+            
+            # Payment
+            cursor.execute('''INSERT INTO payment (payment_id, booking_id, order_id, payment_date, payment_time, amount, status, payment_method) VALUES 
+                (1, 1, 1, '2026-03-01', '09:50:00', 2800.00, 'Completed', 'Card'),
+                (2, 2, 2, '2026-03-01', '10:35:00', 2800.00, 'Completed', 'Cash')''')
+            
+            # Card Payment
+            cursor.execute('''INSERT INTO card_payment (payment_id, card_number, card_type, expiry_date, cardholder_name) VALUES 
+                (1, '4532XXXXXXXX1234', 'Visa', '2028-05-01', 'Arben Hoxha')''')
+            
+            # Cash Payment
+            cursor.execute('''INSERT INTO cash_payment (payment_id, change_amount) VALUES (2, 200.00)''')
+            
+            conn.commit()
+            print("Sample data loaded successfully!")
+        
         conn.close()
         print("Database initialized successfully!")
     except Exception as e:
